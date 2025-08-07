@@ -1,0 +1,14 @@
+build/
+quest.egg-info/
+.vscode/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info
+dist/
+*.whl
+*.log
+*.sqlite3
