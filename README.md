@@ -9,7 +9,7 @@ pip install -e .
 
 # 测试
 
-1. 替换信令服务器地址
+1. 替换信令服务器地址，修改`signalingSettings.json`
     ```
     {
     "robotID": "H1", # 机器人名称
