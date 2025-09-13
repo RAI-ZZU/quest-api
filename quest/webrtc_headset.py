@@ -17,6 +17,7 @@ from quest.headset_utils import HeadsetData, HeadsetFeedback, convert_left_to_ri
 import os
 import threading
 import requests
+import math
 
 def force_codec(pc, sender, forced_codec):
     kind = forced_codec.split("/")[0]
@@ -386,7 +387,8 @@ if __name__ == "__main__":
             # 接收从“头显控制端”发送过来的用户数据（位置、角度等）
             data = headset.receive_data()
             if data is not None:
-                print(f"Received data: {data.h_pos}, {data.h_quat}")
+                d = math.sqrt(data.r_thumbstick_x**2 + data.r_thumbstick_y**2)
+                print(f"Received data: {round(d,3)}, {data.r_thumbstick_x}, {data.r_thumbstick_y}")
 
             feedback = HeadsetFeedback()
             # 显示在头显视野中的一段信息字符

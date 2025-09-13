@@ -1,6 +1,6 @@
 import numpy as np
 from numba import jit, float64, boolean
-from numba.types import UniTuple
+from numba.types import UniTuple,Tuple
 import math
 
 PI = np.pi
@@ -180,6 +180,22 @@ def align_rotation_to_z_axis(matrix):
 
     return aligned_rotation
 
+@jit(Tuple((float64[:, :],float64[:]))(float64[:,:],float64[:,:],float64[:]), nopython=True, fastmath=True, cache=True)
+def calibrate_controller_ee_mapping(current_controller_pose, # vtr
+                                    current_arm_pose, # bte
+                                    btv_quat): # btv
+    # btv
+    btv = np.eye(4)
+    btv[:3, :3] = quat2mat(btv_quat)
+    # btr
+    robot_based_controller_pose = np.ascontiguousarray(btv) @ np.ascontiguousarray(current_controller_pose)
+    # rse
+    controller_ee_pose = np.linalg.inv(robot_based_controller_pose) @ np.ascontiguousarray(current_arm_pose)
+    # re_trans
+    robot_based_controller_ee_trans = current_arm_pose[:3,3] - robot_based_controller_pose[:3,3]
+    return controller_ee_pose[:3,:3],  robot_based_controller_ee_trans
+    
+    
 @jit(float64[:](float64[:,:], float64[:,:]), nopython=True, fastmath=True, cache=True)
 def angular_error(desired, current):
     rc1 = current[0:3, 0]
@@ -212,6 +228,30 @@ def transform_coordinates(current_pose, current_frame, target_frame):
     # 此时认为B=D, 所以D偏移 BTC ，即   X_T_D * B_T_C = X_T_C
     new_pose = np.dot(target_frame, offset_matrix)
     return new_pose
+
+@jit(float64[:,:](float64[:], float64[:,:], float64[:,:], float64[:], float64[:,:]), nopython=True, fastmath=True, cache=True)
+def our_transform_coordinates(btv_quat, current_pose, start_controller_ee_rot,start_controller_ee_trans, rot_offset_matrix):
+    btv = np.eye(4)
+    new_pose = np.eye(4)
+    
+    btv[:3, :3] = quat2mat(btv_quat)
+    # btr = btv @ vtr
+    robot_based_controller_pose = np.dot(btv,np.ascontiguousarray(current_pose))
+    # bte_target_rot = btr_rot * rse_rot
+    bte_target_rot = np.dot(robot_based_controller_pose[:3,:3].copy() , np.ascontiguousarray(start_controller_ee_rot))
+    # bte_target_trans = btr_trans + rse_trans_base 
+    bte_target_trans = robot_based_controller_pose[:3,3] + np.ascontiguousarray(start_controller_ee_trans)
+
+    final_rot = np.dot(bte_target_rot, np.ascontiguousarray(rot_offset_matrix[:3, :3]))
+    # bte_target
+    new_pose = np.eye(4)
+    new_pose[:3, :3] = final_rot
+    new_pose[:3, 3] = bte_target_trans
+    
+    return new_pose
+
+
+
 
 @jit(nopython=True, fastmath=True, cache=True)
 def skew_sym(x):
