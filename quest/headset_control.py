@@ -437,6 +437,9 @@ class HeadsetRightControl():
         self.r_rot_offset = 0.0
         self.l_rot_offset = 0.0
 
+        self.r_thumbstick_count = 0
+        self.l_thumbstick_count = 0
+
         
 
         #self.rot_offset_axis = rot_offset_axis
@@ -456,13 +459,32 @@ class HeadsetRightControl():
     def is_running(self):
         return self.started
 
-    def update_offset_rotation(self,headset_data):
-        r_angle, l_angle = self.r_total_rot_offset, self.l_total_rot_offset
+    def thumbstick_rotating(self,headset_data,):
 
         current_r_thumbstick_vector = np.array([headset_data.r_thumbstick_x,headset_data.r_thumbstick_y])
         current_l_thumbstick_vector = np.array([headset_data.l_thumbstick_x,headset_data.l_thumbstick_y])   
-
+        
         if np.linalg.norm(current_r_thumbstick_vector) > 0.98:
+            self.r_thumbstick_count += 1
+        else:
+            self.r_thumbstick_count = 0
+            
+        if np.linalg.norm(current_l_thumbstick_vector) > 0.98:
+            self.l_thumbstick_count += 1
+        else:
+            self.l_thumbstick_count = 0
+        
+        self.r_thumbstick_count = min(self.r_thumbstick_count,5)
+        self.l_thumbstick_count = min(self.l_thumbstick_count,5)
+        
+        return current_r_thumbstick_vector,current_l_thumbstick_vector, self.r_thumbstick_count >= 1, self.l_thumbstick_count >= 1
+
+
+    def update_offset_rotation(self,headset_data):
+
+        current_r_thumbstick_vector,current_l_thumbstick_vector, r_thumbstick_action, l_thumbstick_action = self.thumbstick_rotating(headset_data)
+
+        if r_thumbstick_action:
             if self.r_thumbstick_vector is None:
                 self.r_thumbstick_vector = current_r_thumbstick_vector
 
@@ -495,9 +517,10 @@ class HeadsetRightControl():
             if self.r_rot_offset != 0.0:
                 self.r_total_rot_offset = self.r_rot_offset
             self.r_rot_offset = 0.0
+            r_angle = self.r_total_rot_offset
 
 
-        if np.linalg.norm(current_l_thumbstick_vector) > 0.98:
+        if l_thumbstick_action:
             
             if self.l_thumbstick_vector is None:
                 # 
@@ -532,9 +555,8 @@ class HeadsetRightControl():
             # 叠加上次的偏移量
             if self.l_rot_offset != 0.0:
                 self.l_total_rot_offset = self.l_rot_offset
-
             self.l_rot_offset = 0.0
-        
+            l_angle = self.l_total_rot_offset
 
         return r_angle, l_angle
 
@@ -628,6 +650,7 @@ class HeadsetRightControl():
             start_head_ee_rot, start_head_ee_trans =  calibrate_controller_ee_mapping(head_pose,head_arm_pose,self.btv_quat_head)
         
         r_rot_offset, l_rot_offset = self.update_offset_rotation(headset_data)
+        #print(r_rot_offset)
         r_rot_offset_matrix = R.from_euler('xyz', [0.0, 0.0, r_rot_offset], degrees=False).as_matrix()
         l_rot_offset_matrix = R.from_euler('xyz', [0.0, 0.0, l_rot_offset], degrees=False).as_matrix()
         #  
@@ -712,7 +735,21 @@ class HeadsetDualArmControl():
 
         self.btv_quat_right = np.asarray(right_btv_quat,dtype=np.float64)
         self.btv_quat_left = np.asarray(left_btv_quat,dtype=np.float64)
+        
         self.wxyz = wxyz
+
+        self.r_thumbstick_vector = None
+        self.l_thumbstick_vector = None
+        
+        self.r_total_rot_offset = 0.0
+        self.l_total_rot_offset = 0.0
+
+        self.r_rot_offset = 0.0
+        self.l_rot_offset = 0.0
+
+        self.r_thumbstick_count = 0
+        self.l_thumbstick_count = 0
+
 
     def reset(self):
         self.start_right_arm_pose = None
@@ -729,6 +766,106 @@ class HeadsetDualArmControl():
     def is_running(self):
         return self.started
     
+    def thumbstick_rotating(self,headset_data,):
+
+        current_r_thumbstick_vector = np.array([headset_data.r_thumbstick_x,headset_data.r_thumbstick_y])
+        current_l_thumbstick_vector = np.array([headset_data.l_thumbstick_x,headset_data.l_thumbstick_y])   
+        
+        if np.linalg.norm(current_r_thumbstick_vector) > 0.98:
+            self.r_thumbstick_count += 1
+        else:
+            self.r_thumbstick_count = 0
+            
+        if np.linalg.norm(current_l_thumbstick_vector) > 0.98:
+            self.l_thumbstick_count += 1
+        else:
+            self.l_thumbstick_count = 0
+        
+        self.r_thumbstick_count = min(self.r_thumbstick_count,5)
+        self.l_thumbstick_count = min(self.l_thumbstick_count,5)
+        
+        return current_r_thumbstick_vector,current_l_thumbstick_vector, self.r_thumbstick_count >= 1, self.l_thumbstick_count >= 1
+
+
+    def update_offset_rotation(self,headset_data):
+
+        current_r_thumbstick_vector,current_l_thumbstick_vector, r_thumbstick_action, l_thumbstick_action = self.thumbstick_rotating(headset_data)
+
+        if r_thumbstick_action:
+            if self.r_thumbstick_vector is None:
+                self.r_thumbstick_vector = current_r_thumbstick_vector
+
+
+            # 计算从self.r_thumbstick_vector 旋转到 current_r_thumbstick_vector 向量之间的角度[0,2pi]
+            # 计算从self.r_thumbstick_vector 旋转到 current_r_thumbstick_vector 向量之间的角度[0,2pi]
+            # 归一化向量
+            v1 = self.r_thumbstick_vector / np.linalg.norm(self.r_thumbstick_vector)
+            v2 = current_r_thumbstick_vector / np.linalg.norm(current_r_thumbstick_vector)
+            
+            # 计算点积和叉积
+            dot_product = np.dot(v1, v2)
+            cross_product = np.cross(v1, v2)
+                
+            # 使用arctan2计算角度（范围[-π, π]）
+            r_angle = np.arctan2(cross_product, dot_product)
+
+            # 将当前的角度 加上之前的总offset
+            r_angle += self.r_total_rot_offset
+
+            # 将角度转换到[0, 2π]范围
+            if r_angle < 0:
+                r_angle += 2 * np.pi
+            # 保存摇杆当前对应的旋转量
+            self.r_rot_offset = r_angle
+        else:
+            # 在松手后，清除起始向量
+            self.r_thumbstick_vector = None
+            # 叠加上次的偏移量
+            if self.r_rot_offset != 0.0:
+                self.r_total_rot_offset = self.r_rot_offset
+            self.r_rot_offset = 0.0
+            r_angle = self.r_total_rot_offset
+
+
+        if l_thumbstick_action:
+            
+            if self.l_thumbstick_vector is None:
+                # 
+                self.l_thumbstick_vector = current_l_thumbstick_vector
+
+            # 计算从self.r_thumbstick_vector 旋转到 current_r_thumbstick_vector 向量之间的角度[0,2pi]
+            # 计算从self.r_thumbstick_vector 旋转到 current_r_thumbstick_vector 向量之间的角度[0,2pi]
+            # 归一化向量
+            v1 = self.l_thumbstick_vector / np.linalg.norm(self.l_thumbstick_vector)
+            v2 = current_l_thumbstick_vector / np.linalg.norm(current_l_thumbstick_vector)
+            
+            # 计算点积和叉积
+            dot_product = np.dot(v1, v2)
+            cross_product = np.cross(v1, v2)
+            
+            # 使用arctan2计算角度（范围[-π, π]）
+            l_angle = np.arctan2(cross_product, dot_product)
+
+            # 将当前的角度 加上之前的总offset
+            l_angle += self.l_total_rot_offset
+
+            # 将角度转换到[0, 2π]范围
+            if l_angle < 0:
+                l_angle += 2 * np.pi
+            # 保存摇杆当前对应的旋转量
+            self.l_rot_offset = l_angle
+                
+                
+        else:
+            # 在松手后，清除起始向量
+            self.l_thumbstick_vector = None
+            # 叠加上次的偏移量
+            if self.l_rot_offset != 0.0:
+                self.l_total_rot_offset = self.l_rot_offset
+            self.l_rot_offset = 0.0
+            l_angle = self.l_total_rot_offset
+
+        return r_angle, l_angle
 
 
     def start(self, headset_data, right_arm_pose, left_arm_pose):
@@ -817,10 +954,14 @@ class HeadsetDualArmControl():
             start_right_ee_rot, start_right_ee_trans =  calibrate_controller_ee_mapping(right_pose,right_arm_pose,self.btv_quat_right)
             start_left_ee_rot, start_left_ee_trans =  calibrate_controller_ee_mapping(left_pose,left_arm_pose,self.btv_quat_left)
 
+        r_rot_offset, l_rot_offset = self.update_offset_rotation(headset_data)
+        #print(r_rot_offset)
+        r_rot_offset_matrix = R.from_euler('xyz', [0.0, 0.0, r_rot_offset], degrees=False).as_matrix()
+        l_rot_offset_matrix = R.from_euler('xyz', [0.0, 0.0, l_rot_offset], degrees=False).as_matrix()
 
         #  
-        new_right_arm_pose = our_transform_coordinates(self.btv_quat_right, right_pose, start_right_ee_rot, start_right_ee_trans)
-        new_left_arm_pose = our_transform_coordinates(self.btv_quat_left, left_pose, start_left_ee_rot, start_left_ee_trans)
+        new_right_arm_pose = our_transform_coordinates(self.btv_quat_right, right_pose, start_right_ee_rot, start_right_ee_trans,r_rot_offset_matrix)
+        new_left_arm_pose = our_transform_coordinates(self.btv_quat_left, left_pose, start_left_ee_rot, start_left_ee_trans,l_rot_offset_matrix)
 
         # convert to position and quaternion
         new_right_arm_pos, new_right_arm_quat = mat2pose(new_right_arm_pose)
